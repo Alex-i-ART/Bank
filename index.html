@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Мой Банк / Кредиты</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Для имитации банковского стиля используем Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz@14..32&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Шапка банка -->
+        <header class="bank-header">
+            <div class="logo">
+                <span class="logo-icon">🏦</span>
+                <h1>Т-Банк (Симулятор)</h1>
+            </div>
+            <div class="user-profile">
+                <span>Иван Петров</span>
+                <span class="avatar">ИП</span>
+            </div>
+        </header>
+
+        <main class="credit-workspace">
+            <!-- Блок параметров кредита -->
+            <section class="credit-params glass-panel">
+                <h2>Оформить кредит</h2>
+                <div class="params-grid">
+                    <div class="param-item">
+                        <label for="amount">Сумма (₽)</label>
+                        <input type="number" id="amount" value="100000" min="10000" step="1000">
+                    </div>
+                    <div class="param-item">
+                        <label for="term">Срок (мес)</label>
+                        <input type="number" id="term" value="12" min="3" max="60">
+                    </div>
+                    <div class="param-item">
+                        <label for="rate">Ставка (% год.)</label>
+                        <input type="number" id="rate" value="15" min="1" max="30" step="0.1" disabled>
+                    </div>
+                    <div class="param-item">
+                        <label>&nbsp;</label>
+                        <button id="apply-params" class="btn-primary">Рассчитать график</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Информация о текущем кредите (если есть) -->
+            <section class="loan-summary glass-panel" id="loanSummary" style="display: none;">
+                <div class="summary-row">
+                    <span>Текущий долг:</span>
+                    <strong id="remainingDebt">0 ₽</strong>
+                </div>
+                <div class="summary-row">
+                    <span>Просрочено:</span>
+                    <strong id="overdueInfo" style="color: var(--error);">0 ₽</strong>
+                </div>
+                <div class="summary-row">
+                    <span>Следующий платёж:</span>
+                    <strong id="nextPaymentInfo">0 ₽ (до 28.02.2025)</strong>
+                </div>
+            </section>
+
+            <!-- Блок для внесения платежа -->
+            <section class="payment-section glass-panel">
+                <div class="payment-input-group">
+                    <input type="number" id="payment-amount" placeholder="Сумма платежа" min="1">
+                    <button id="make-payment" class="btn-primary">💸 Внести платёж</button>
+                </div>
+                <div id="payment-feedback" class="feedback-message"></div>
+            </section>
+
+            <!-- График платежей -->
+            <section class="schedule-section">
+                <h2>График платежей</h2>
+                <div class="table-wrapper glass-panel">
+                    <table id="payment-schedule">
+                        <thead>
+                            <tr>
+                                <th>№</th>
+                                <th>Дата</th>
+                                <th>Платёж (₽)</th>
+                                <th>Основной долг (₽)</th>
+                                <th>Проценты (₽)</th>
+                                <th>Остаток (₽)</th>
+                                <th>Статус</th>
+                            </tr>
+                        </thead>
+                        <tbody id="schedule-body">
+                            <tr><td colspan="7" class="empty-table">Заполните параметры и нажмите "Рассчитать"</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

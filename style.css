@@ -1,0 +1,269 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Inter', sans-serif;
+}
+
+:root {
+    --bg-dark: #0b1419;
+    --bg-panel: rgba(20, 30, 40, 0.7);
+    --primary: #1f8efa;
+    --primary-hover: #4da2ff;
+    --text-primary: #ffffff;
+    --text-secondary: #99aabb;
+    --border-light: #2a3a44;
+    --success: #2ec78f;
+    --warning: #ffb443;
+    --error: #ff5c5c;
+    --overdue-bg: rgba(255, 80, 80, 0.15);
+}
+
+body {
+    background-color: var(--bg-dark);
+    background-image: radial-gradient(circle at 20% 20%, #1a3a4a 0%, #0b1419 70%);
+    min-height: 100vh;
+    color: var(--text-primary);
+    padding: 16px;
+}
+
+.app-container {
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+/* Стеклянные панели */
+.glass-panel {
+    background: var(--bg-panel);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 28px;
+    padding: 24px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+/* Шапка */
+.bank-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 28px;
+    padding: 8px 16px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 60px;
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--border-light);
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.logo-icon {
+    font-size: 28px;
+}
+
+.logo h1 {
+    font-size: 1.5rem;
+    font-weight: 500;
+    letter-spacing: -0.5px;
+}
+
+.user-profile {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.avatar {
+    background: var(--primary);
+    width: 40px;
+    height: 40px;
+    border-radius: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+}
+
+/* Параметры кредита */
+.params-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 16px;
+    margin-top: 16px;
+}
+
+.param-item {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.param-item label {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.param-item input {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--border-light);
+    border-radius: 18px;
+    padding: 12px 16px;
+    color: white;
+    font-size: 1rem;
+    outline: none;
+    transition: border 0.2s;
+}
+
+.param-item input:focus {
+    border-color: var(--primary);
+}
+
+.param-item input:disabled {
+    opacity: 0.6;
+    filter: grayscale(0.5);
+}
+
+.btn-primary {
+    background: var(--primary);
+    border: none;
+    border-radius: 28px;
+    padding: 12px 24px;
+    font-weight: 600;
+    color: white;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+    font-size: 1rem;
+    box-shadow: 0 4px 12px rgba(31, 142, 250, 0.3);
+}
+
+.btn-primary:hover {
+    background: var(--primary-hover);
+}
+
+.btn-primary:active {
+    transform: scale(0.98);
+}
+
+/* Сводка по кредиту */
+.loan-summary {
+    margin: 20px 0;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.summary-row {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    background: rgba(0,0,0,0.2);
+    padding: 8px 16px;
+    border-radius: 40px;
+}
+
+/* Платёжная секция */
+.payment-section {
+    margin: 20px 0;
+}
+
+.payment-input-group {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.payment-input-group input {
+    flex: 2;
+    min-width: 200px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--border-light);
+    border-radius: 40px;
+    padding: 14px 20px;
+    color: white;
+    font-size: 1.1rem;
+}
+
+.feedback-message {
+    margin-top: 16px;
+    padding: 12px 20px;
+    border-radius: 40px;
+    background: rgba(0,0,0,0.3);
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+/* Таблица графика */
+.schedule-section h2 {
+    margin-bottom: 16px;
+    font-weight: 400;
+    color: var(--text-secondary);
+}
+
+.table-wrapper {
+    overflow-x: auto;
+    padding: 0;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 800px;
+}
+
+th {
+    text-align: left;
+    padding: 18px 16px;
+    color: var(--text-secondary);
+    font-weight: 500;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border-light);
+}
+
+td {
+    padding: 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 40px;
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.status-paid {
+    background: rgba(46, 199, 143, 0.2);
+    color: var(--success);
+}
+
+.status-pending {
+    background: rgba(255, 180, 67, 0.15);
+    color: var(--warning);
+}
+
+.status-overdue {
+    background: rgba(255, 92, 92, 0.2);
+    color: var(--error);
+    font-weight: 600;
+}
+
+.overdue-row {
+    background: rgba(255, 80, 80, 0.1);
+}
+
+.empty-table {
+    text-align: center;
+    color: var(--text-secondary);
+    padding: 40px !important;
+}
