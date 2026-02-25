@@ -3,100 +3,137 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Мой Банк / Кредиты</title>
+    <title>TG-bank - Главная</title>
     <link rel="stylesheet" href="style.css">
-    <!-- Для имитации банковского стиля используем Inter -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz@14..32&display=swap" rel="stylesheet">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
-    <div class="app-container">
-        <!-- Шапка банка -->
-        <header class="bank-header">
-            <div class="logo">
-                <span class="logo-icon">🏦</span>
-                <h1>Т-Банк (Симулятор)</h1>
+    <div class="bank-container">
+        <!-- Хедер -->
+        <div class="bank-header">
+            <div class="logo-area">
+                <div class="bank-logo">TG-bank</div>
+                <div class="badge">Официальный сайт</div>
             </div>
             <div class="user-profile">
-                <span>Иван Петров</span>
-                <span class="avatar">ИП</span>
+                <a href="/login" class="login-btn">Войти</a>
+                <a href="/login?register=true" class="register-btn">Регистрация</a>
             </div>
-        </header>
+        </div>
 
-        <main class="credit-workspace">
-            <!-- Блок параметров кредита -->
-            <section class="credit-params glass-panel">
-                <h2>Оформить кредит</h2>
-                <div class="params-grid">
-                    <div class="param-item">
-                        <label for="amount">Сумма (₽)</label>
-                        <input type="number" id="amount" value="100000" min="10000" step="1000">
-                    </div>
-                    <div class="param-item">
-                        <label for="term">Срок (мес)</label>
-                        <input type="number" id="term" value="12" min="3" max="60">
-                    </div>
-                    <div class="param-item">
-                        <label for="rate">Ставка (% год.)</label>
-                        <input type="number" id="rate" value="15" min="1" max="30" step="0.1" disabled>
-                    </div>
-                    <div class="param-item">
-                        <label>&nbsp;</label>
-                        <button id="apply-params" class="btn-primary">Рассчитать график</button>
-                    </div>
-                </div>
-            </section>
+        <!-- Основной контент -->
+        <div class="bank-content">
+            <!-- Герой секция -->
+            <div class="hero-section">
+                <h1>TG-bank — ваш надежный финансовый партнер</h1>
+                <p>Кредиты с аннуитетными платежами по выгодной ставке</p>
+                <a href="/login" class="cta-button">Оформить кредит</a>
+            </div>
 
-            <!-- Информация о текущем кредите (если есть) -->
-            <section class="loan-summary glass-panel" id="loanSummary" style="display: none;">
-                <div class="summary-row">
-                    <span>Текущий долг:</span>
-                    <strong id="remainingDebt">0 ₽</strong>
+            <!-- Преимущества -->
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">💰</div>
+                    <h3>Выгодные ставки</h3>
+                    <p>Ставка от 12.5% годовых на все виды кредитов</p>
                 </div>
-                <div class="summary-row">
-                    <span>Просрочено:</span>
-                    <strong id="overdueInfo" style="color: var(--error);">0 ₽</strong>
+                <div class="feature-card">
+                    <div class="feature-icon">📊</div>
+                    <h3>Прозрачные условия</h3>
+                    <p>Четкий график платежей без скрытых комиссий</p>
                 </div>
-                <div class="summary-row">
-                    <span>Следующий платёж:</span>
-                    <strong id="nextPaymentInfo">0 ₽ (до 28.02.2025)</strong>
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h3>Быстрое оформление</h3>
+                    <p>Решение по кредиту за 5 минут</p>
                 </div>
-            </section>
+                <div class="feature-card">
+                    <div class="feature-icon">📱</div>
+                    <h3>Удобное управление</h3>
+                    <p>Личный кабинет с полным контролем</p>
+                </div>
+            </div>
 
-            <!-- Блок для внесения платежа -->
-            <section class="payment-section glass-panel">
-                <div class="payment-input-group">
-                    <input type="number" id="payment-amount" placeholder="Сумма платежа" min="1">
-                    <button id="make-payment" class="btn-primary">💸 Внести платёж</button>
+            <!-- Калькулятор -->
+            <div class="calculator-section">
+                <h2>Кредитный калькулятор</h2>
+                <div class="calculator-form">
+                    <div class="form-group">
+                        <label>Сумма кредита</label>
+                        <input type="range" id="amountRange" min="10000" max="5000000" step="10000" value="500000">
+                        <div class="range-value" id="amountValue">500 000 ₽</div>
+                    </div>
+                    <div class="form-group">
+                        <label>Срок кредита (месяцев)</label>
+                        <input type="range" id="termRange" min="6" max="60" step="6" value="24">
+                        <div class="range-value" id="termValue">24 мес</div>
+                    </div>
+                    <div class="calc-result">
+                        <div class="result-item">
+                            <span>Ежемесячный платеж:</span>
+                            <strong id="monthlyPayment">23,547 ₽</strong>
+                        </div>
+                        <div class="result-item">
+                            <span>Процентная ставка:</span>
+                            <strong>12.5%</strong>
+                        </div>
+                        <div class="result-item">
+                            <span>Общая сумма выплат:</span>
+                            <strong id="totalPayment">565,128 ₽</strong>
+                        </div>
+                    </div>
                 </div>
-                <div id="payment-feedback" class="feedback-message"></div>
-            </section>
+            </div>
+        </div>
 
-            <!-- График платежей -->
-            <section class="schedule-section">
-                <h2>График платежей</h2>
-                <div class="table-wrapper glass-panel">
-                    <table id="payment-schedule">
-                        <thead>
-                            <tr>
-                                <th>№</th>
-                                <th>Дата</th>
-                                <th>Платёж (₽)</th>
-                                <th>Основной долг (₽)</th>
-                                <th>Проценты (₽)</th>
-                                <th>Остаток (₽)</th>
-                                <th>Статус</th>
-                            </tr>
-                        </thead>
-                        <tbody id="schedule-body">
-                            <tr><td colspan="7" class="empty-table">Заполните параметры и нажмите "Рассчитать"</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </section>
-        </main>
+        <!-- Футер -->
+        <div class="bank-footer">
+            <p>© 2024 TG-bank. Все права защищены.</p>
+            <p>Лицензия ЦБ РФ № 1234 от 01.01.2024</p>
+        </div>
     </div>
-    <script src="script.js"></script>
+
+    <script>
+        // Telegram WebApp инициализация
+        let tg = window.Telegram.WebApp;
+        tg.expand();
+        tg.ready();
+
+        // Калькулятор
+        const amountRange = document.getElementById('amountRange');
+        const termRange = document.getElementById('termRange');
+        const amountValue = document.getElementById('amountValue');
+        const termValue = document.getElementById('termValue');
+        const monthlyPaymentEl = document.getElementById('monthlyPayment');
+        const totalPaymentEl = document.getElementById('totalPayment');
+
+        function formatNumber(num) {
+            return new Intl.NumberFormat('ru-RU').format(Math.round(num));
+        }
+
+        function calculatePayment() {
+            const amount = parseInt(amountRange.value);
+            const term = parseInt(termRange.value);
+            const rate = 12.5 / 100 / 12; // месячная ставка
+            
+            const monthlyPayment = amount * rate * Math.pow(1 + rate, term) / (Math.pow(1 + rate, term) - 1);
+            const totalPayment = monthlyPayment * term;
+            
+            monthlyPaymentEl.textContent = formatNumber(monthlyPayment) + ' ₽';
+            totalPaymentEl.textContent = formatNumber(totalPayment) + ' ₽';
+        }
+
+        amountRange.addEventListener('input', function() {
+            amountValue.textContent = formatNumber(this.value) + ' ₽';
+            calculatePayment();
+        });
+
+        termRange.addEventListener('input', function() {
+            termValue.textContent = this.value + ' мес';
+            calculatePayment();
+        });
+
+        calculatePayment();
+    </script>
 </body>
 </html>

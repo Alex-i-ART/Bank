@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TG-bank - Личный кабинет</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+    <div class="bank-container">
+        <div class="bank-header">
+            <div class="logo-area">
+                <div class="bank-logo">TG-bank</div>
+                <div class="badge">Личный кабинет</div>
+            </div>
+            <div class="user-profile">
+                <span class="user-name" id="userName">Загрузка...</span>
+                <button class="logout-btn" onclick="logout()">Выйти</button>
+            </div>
+        </div>
+
+        <div class="dashboard-content">
+            <!-- Приветствие -->
+            <div class="greeting-block">
+                <h2>Добро пожаловать, <span id="userFullName">...</span>!</h2>
+                <p>Здесь вы можете управлять своими кредитами</p>
+            </div>
+
+            <!-- Оформление кредита -->
+            <div class="loan-application" id="loanApplication">
+                <h3>Оформить новый кредит</h3>
+                <div class="loan-form">
+                    <div class="form-group">
+                        <label>Сумма кредита</label>
+                        <input type="number" id="loanAmount" min="10000" max="5000000" step="10000" value="500000">
+                    </div>
+                    <div class="form-group">
+                        <label>Срок (месяцев)</label>
+                        <input type="number" id="loanTerm" min="6" max="60" step="6" value="24">
+                    </div>
+                    <button class="apply-button" onclick="applyForLoan()">Оформить кредит</button>
+                </div>
+                <div id="loanError" class="error-message"></div>
+            </div>
+
+            <!-- Список кредитов -->
+            <div class="loans-list" id="loansList">
+                <h3>Ваши кредиты</h3>
+                <div id="noLoans" class="no-loans">
+                    У вас пока нет активных кредитов
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно для платежа -->
+    <div id="paymentModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal()">&times;</span>
+            <h3>Внести платеж</h3>
+            <div id="paymentInfo"></div>
+            <div class="form-group">
+                <label>Сумма платежа</label>
+                <input type="number" id="paymentAmount" placeholder="Введите сумму">
+            </div>
+            <button class="payment-button" onclick="makePayment()">Внести</button>
+            <div id="paymentResult" class="payment-result"></div>
+        </div>
+    </div>
+
+    <script>
+        let tg = window.Telegram.WebApp;
+        tg.expand();
+        tg.ready();
+
+        let currentLoanId = null;
+        let userData = null;
+
+        // Проверка авторизации и загрузка данных
+        async function checkAuth() {
+            try {
+                const response = await fetch('/api/check-auth');
+                const data = await response.json();
+                
+                if (!data.authenticated) {
+                    window.location.href = '/login';
+                    return;
+                }
+
+                document.getElementById('userName').textContent = data.user.username;
+                document.getElementById('userFullName').textContent = data.user.full_name;
+                
+                loadUserData();
+            } catch (error) {
+                console.error('Ошибка проверки авторизации:', error);
+            }
+        }
+
+        // Загрузка данных пользователя
+        async function loadUserData() {
+            try {
+                const response = await fetch('/api/user-data');
+                userData = await response.json();
+                
+                displayLoans(userData.loans);
+            } catch (error) {
+                console.error('Ошибка загрузки данных:', error);
+            }
+        }
+
+        // Отображение кредитов
+        function displayLoans(loans) {
+            const loansList = document.getElementById('loansList');
+            const noLoans = document.getElementById('noLoans');
+            
+            if (!loans || loans.length === 0) {
+                noLoans.style.display = 'block';
+                return;
+            }
+
+            noLoans.style.display = 'none';
+            
+            // Удаляем старые кредиты кроме "нет кредитов"
+            const oldLoans = loansList.querySelectorAll('.loan-card');
+            oldLoans.forEach(loan => loan.remove());
+
+            loans.forEach(loan => {
+                const loanCard = createLoanCard(loan);
+                loansList.appendChild(loanCard);
+            });
+        }
+
+        // Создание карточки кредита
+        function createLoanCard(loan) {
+            const card = document.createElement('div');
+            card.className = 'loan-card';
+            
+            const today = new Date();
+            const nextPayment = loan.schedule.find(p => p.status === 'pending');
+            
+            let penaltyInfo = '';
+            let statusClass = '';
+            
+            if (nextPayment) {
+                const dueDate = new Date(nextPayment.due_date);
+                if (today > dueDate) {
+                    const daysOverdue = Math.floor((today - dueDate) / (1000 * 60 * 60 * 24));
+                    const penalty = nextPayment.amount * 0.001 * daysOverdue;
+                    penaltyInfo = `<div class="penalty">Пеня: ${formatNumber(penalty)} ₽ (${daysOverdue} дн.)</div>`;
+                    statusClass = 'overdue';
+                }
+            }
+
+            card.innerHTML = `
+                <div class="loan-header ${statusClass}">
+                    <h4>Кредит №${loan.id}</h4>
+                    <span class="loan-status">${getStatusText(loan.status)}</span>
+                </div>
+                <div class="loan-details">
+                    <div class="detail-item">
+                        <span>Сумма:</span>
+                        <strong>${formatNumber(loan.amount)} ₽</strong>
+                    </div>
+                    <div class="detail-item">
+                        <span>Остаток:</span>
+                        <strong>${formatNumber(loan.remaining_amount)} ₽</strong>
+                    </div>
+                    <div class="detail-item">
+                        <span>Ежемесячный платеж:</span>
+                        <strong>${formatNumber(loan.monthly_payment)} ₽</strong>
+                    </div>
+                    <div class="detail-item">
+                        <span>Срок:</span>
+                        <strong>${loan.term_months} мес</strong>
+                    </div>
+                    ${penaltyInfo}
+                </div>
+                <button class="payment-btn" onclick="openPaymentModal(${loan.id})">Внести платеж</button>
+                <button class="schedule-btn" onclick="toggleSchedule(${loan.id})">Показать график</button>
+                <div id="schedule-${loan.id}" class="payment-schedule" style="display: none;">
+                    ${generateScheduleHTML(loan.schedule)}
+                </div>
+            `;
+            
+            return card;
+        }
+
+        // Генерация графика платежей
+        function generateScheduleHTML(schedule) {
+            let html = '<table class="schedule-table"><tr><th>№</th><th>Дата</th><th>Сумма</th><th>Основной долг</th><th>Проценты</th><th>Остаток</th><th>Статус</th></tr>';
+            
+            schedule.forEach(p => {
+                const statusClass = p.status === 'paid' ? 'paid' : (p.penalty > 0 ? 'overdue' : 'pending');
+                html += `
+                    <tr class="${statusClass}">
+                        <td>${p.payment_number}</td>
+                        <td>${formatDate(p.due_date)}</td>
+                        <td>${formatNumber(p.amount)} ₽</td>
+                        <td>${formatNumber(p.principal)} ₽</td>
+                        <td>${formatNumber(p.interest)} ₽</td>
+                        <td>${formatNumber(p.remaining_balance)} ₽</td>
+                        <td>${p.status === 'paid' ? '✓' : (p.penalty > 0 ? '⚠️ Просрочка' : '⏳')}</td>
+                    </tr>
+                `;
+            });
+            
+            html += '</table>';
+            return html;
+        }
+
+        // Оформление кредита
+        async function applyForLoan() {
+            const amount = document.getElementById('loanAmount').value;
+            const term = document.getElementById('loanTerm').value;
+            const errorEl = document.getElementById('loanError');
+
+            try {
+                const response = await fetch('/api/loans/create', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ amount, term })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    loadUserData();
+                    errorEl.textContent = 'Кредит успешно оформлен!';
+                    errorEl.style.color = 'green';
+                    
+                    // Очищаем форму
+                    document.getElementById('loanAmount').value = 500000;
+                    document.getElementById('loanTerm').value = 24;
+                } else {
+                    errorEl.textContent = data.error;
+                    errorEl.style.color = 'red';
+                }
+            } catch (error) {
+                errorEl.textContent = 'Ошибка оформления кредита';
+                errorEl.style.color = 'red';
+            }
+        }
+
+        // Открытие модального окна платежа
+        function openPaymentModal(loanId) {
+            currentLoanId = loanId;
+            document.getElementById('paymentModal').style.display = 'block';
+            document.getElementById('paymentAmount').value = '';
+            document.getElementById('paymentResult').innerHTML = '';
+            
+            // Находим информацию о следующем платеже
+            const loan = userData.loans.find(l => l.id === loanId);
+            const nextPayment = loan.schedule.find(p => p.status === 'pending');
+            
+            if (nextPayment) {
+                const today = new Date();
+                const dueDate = new Date(nextPayment.due_date);
+                let penalty = 0;
+                
+                if (today > dueDate) {
+                    const daysOverdue = Math.floor((today - dueDate) / (1000 * 60 * 60 * 24));
+                    penalty = nextPayment.amount * 0.001 * daysOverdue;
+                }
+                
+                document.getElementById('paymentInfo').innerHTML = `
+                    <div class="payment-info">
+                        <p>Следующий платеж: ${formatNumber(nextPayment.amount)} ₽</p>
+                        <p>Дата платежа: ${formatDate(nextPayment.due_date)}</p>
+                        ${penalty > 0 ? `<p class="penalty">Пеня: ${formatNumber(penalty)} ₽</p>` : ''}
+                        <p>Всего к оплате: ${formatNumber(nextPayment.amount + penalty)} ₽</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Внесение платежа
+        async function makePayment() {
+            const amount = document.getElementById('paymentAmount').value;
+            const resultEl = document.getElementById('paymentResult');
+
+            if (!amount || amount <= 0) {
+                resultEl.innerHTML = '<p class="error">Введите корректную сумму</p>';
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/payments/make', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        loanId: currentLoanId,
+                        amount: parseFloat(amount)
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    resultEl.innerHTML = `<p class="success">${data.message}</p>`;
+                    loadUserData(); // Обновляем данные
+                    
+                    setTimeout(() => {
+                        closeModal();
+                    }, 3000);
+                } else {
+                    resultEl.innerHTML = `<p class="error">${data.error}</p>`;
+                }
+            } catch (error) {
+                resultEl.innerHTML = '<p class="error">Ошибка при внесении платежа</p>';
+            }
+        }
+
+        // Показать/скрыть график
+        function toggleSchedule(loanId) {
+            const schedule = document.getElementById(`schedule-${loanId}`);
+            if (schedule.style.display === 'none') {
+                schedule.style.display = 'block';
+            } else {
+                schedule.style.display = 'none';
+            }
+        }
+
+        // Закрыть модальное окно
+        function closeModal() {
+            document.getElementById('paymentModal').style.display = 'none';
+            currentLoanId = null;
+        }
+
+        // Выход
+        async function logout() {
+            await fetch('/api/logout', { method: 'POST' });
+            window.location.href = '/login';
+        }
+
+        // Вспомогательные функции
+        function formatNumber(num) {
+            return new Intl.NumberFormat('ru-RU').format(Math.round(num));
+        }
+
+        function formatDate(dateStr) {
+            return new Date(dateStr).toLocaleDateString('ru-RU');
+        }
+
+        function getStatusText(status) {
+            const statuses = {
+                'active': 'Активен',
+                'paid': 'Оплачен',
+                'overdue': 'Просрочен'
+            };
+            return statuses[status] || status;
+        }
+
+        // Инициализация
+        checkAuth();
+
+        // Закрытие модального окна при клике вне его
+        window.onclick = function(event) {
+            const modal = document.getElementById('paymentModal');
+            if (event.target === modal) {
+                closeModal();
+            }
+        }
+    </script>
+</body>
+</html>
