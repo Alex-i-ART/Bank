@@ -375,10 +375,13 @@
         let userData = null;
 
         // Проверка авторизации
+        // Проверка авторизации
         async function checkAuth() {
             try {
                 console.log('Проверка авторизации...');
-                const response = await fetch('/api/check-auth');
+                const response = await fetch('/api/check-auth', {
+                    credentials: 'include'  // ВАЖНО!
+                });
                 
                 if (!response.ok) {
                     throw new Error(`HTTP ошибка! Статус: ${response.status}`);
@@ -403,7 +406,6 @@
                 document.getElementById('userName').textContent = 'Ошибка';
                 document.getElementById('userFullName').textContent = 'Ошибка соединения';
                 
-                // Показываем сообщение об ошибке
                 const noLoans = document.getElementById('noLoans');
                 noLoans.innerHTML = 'Ошибка соединения с сервером. Проверьте подключение к интернету.';
                 noLoans.style.display = 'block';

@@ -13,8 +13,10 @@ const PORT = process.env.PORT || 3000;
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cors({
-    origin: true,
-    credentials: true
+    origin: 'https://tg-bank.onrender.com', // Точный адрес вашего сайта
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 app.use((req, res, next) => {
     console.log(`📨 ${new Date().toISOString()} - ${req.method} ${req.url}`);
@@ -25,13 +27,14 @@ app.use(express.static(path.join(__dirname)));
 // Настройка сессий
 app.use(session({
     secret: process.env.SESSION_SECRET || 'tg-bank-secret-key-2024',
-    resave: false,
-    saveUninitialized: false,
+    resave: true, // Важно!
+    saveUninitialized: true, // Важно!
     cookie: { 
         secure: process.env.NODE_ENV === 'production',
         httpOnly: true,
         maxAge: 1000 * 60 * 60 * 24, // 24 часа
-        sameSite: 'lax'
+        sameSite: 'lax',
+        domain: process.env.NODE_ENV === 'production' ? '.onrender.com' : undefined
     }
 }));
 
