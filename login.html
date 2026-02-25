@@ -74,32 +74,46 @@
 
                     <div class="form-group">
                         <label>Телефон</label>
-                        <input type="tel" id="regPhone" placeholder="+7 (999) 123-45-67" required>
+                        <input type="tel" id="regPhone" placeholder="+7 (999) 123-45-67">
                     </div>
 
                     <button type="submit" class="auth-button">Зарегистрироваться</button>
                 </form>
 
                 <div id="errorMessage" class="error-message"></div>
-                <div id="successMessage" class="success-message"></div>
+                <div id="debugInfo" class="debug-info"></div>
             </div>
         </div>
     </div>
 
     <style>
-        .success-message {
-            color: #28a745;
-            text-align: center;
+        .debug-info {
             margin-top: 15px;
-            font-size: 14px;
-            font-weight: 500;
+            padding: 10px;
+            background: #f0f0f0;
+            border-radius: 5px;
+            font-size: 12px;
+            color: #333;
+            white-space: pre-wrap;
+            display: none;
+        }
+        .debug-info.show {
+            display: block;
         }
     </style>
 
-   <script>
+    <script>
         let tg = window.Telegram.WebApp;
         tg.expand();
         tg.ready();
+
+        // Функция для отладки
+        function showDebug(message) {
+            const debugEl = document.getElementById('debugInfo');
+            debugEl.classList.add('show');
+            debugEl.innerHTML += new Date().toLocaleTimeString() + ': ' + message + '<br>';
+            console.log('🔍 DEBUG:', message);
+        }
 
         // Показ вкладок
         function showTab(tab) {
@@ -115,6 +129,8 @@
             }
             
             document.getElementById('errorMessage').textContent = '';
+            document.getElementById('debugInfo').innerHTML = '';
+            document.getElementById('debugInfo').classList.remove('show');
         }
 
         // Проверка URL параметра
@@ -123,22 +139,25 @@
             showTab('register');
         }
 
-        // Обработка входа - ИСПРАВЛЕНО
+        // Обработка входа
         async function handleLogin(event) {
-            event.preventDefault(); // ОСТАНОВИТЬ отправку формы
+            event.preventDefault();
             
-            console.log('🟢 handleLogin вызван');
+            showDebug('🟢 handleLogin вызван');
             
             const username = document.getElementById('loginUsername').value;
             const password = document.getElementById('loginPassword').value;
             const errorEl = document.getElementById('errorMessage');
 
+            errorEl.textContent = '';
+            
             if (!username || !password) {
                 errorEl.textContent = 'Введите логин и пароль';
+                showDebug('❌ Пустые поля');
                 return;
             }
 
-            console.log('Отправка запроса:', { username, password });
+            showDebug(`📤 Отправка запроса: username=${username}`);
 
             try {
                 const response = await fetch('/api/login', {
@@ -149,35 +168,40 @@
                     body: JSON.stringify({ username, password })
                 });
 
-                console.log('Статус ответа:', response.status);
+                showDebug(`📥 Статус ответа: ${response.status}`);
                 
                 const data = await response.json();
-                console.log('Данные ответа:', data);
+                showDebug(`📦 Данные ответа: ${JSON.stringify(data)}`);
 
-                if (data.success) {
-                    console.log('Успех! Перенаправление...');
+                if (response.ok && data.success) {
+                    showDebug('✅ Успех! Перенаправление на /dashboard');
                     window.location.href = '/dashboard';
                 } else {
                     errorEl.textContent = data.error || 'Ошибка входа';
+                    showDebug(`❌ Ошибка: ${data.error || 'Неизвестная ошибка'}`);
                 }
             } catch (error) {
-                console.error('Ошибка:', error);
-                errorEl.textContent = 'Ошибка соединения с сервером: ' + error.message;
+                console.error('❌ Ошибка:', error);
+                errorEl.textContent = 'Ошибка соединения с сервером';
+                showDebug(`❌ Исключение: ${error.message}`);
             }
         }
 
-        // Обработка регистрации - ИСПРАВЛЕНО
+        // Обработка регистрации
         async function handleRegister(event) {
-            event.preventDefault(); // ОСТАНОВИТЬ отправку формы
+            event.preventDefault();
             
-            console.log('🟢 handleRegister вызван');
+            showDebug('🟢 handleRegister вызван');
             
             const password = document.getElementById('regPassword').value;
             const confirm = document.getElementById('regConfirmPassword').value;
             const errorEl = document.getElementById('errorMessage');
 
+            errorEl.textContent = '';
+
             if (password !== confirm) {
                 errorEl.textContent = 'Пароли не совпадают';
+                showDebug('❌ Пароли не совпадают');
                 return;
             }
 
@@ -186,10 +210,10 @@
                 password: password,
                 full_name: document.getElementById('regFullName').value,
                 email: document.getElementById('regEmail').value,
-                phone: document.getElementById('regPhone').value
+                phone: document.getElementById('regPhone').value || ''
             };
 
-            console.log('Отправка данных:', userData);
+            showDebug(`📤 Отправка регистрации: ${userData.username}`);
 
             try {
                 const response = await fetch('/api/register', {
@@ -200,41 +224,35 @@
                     body: JSON.stringify(userData)
                 });
 
-                console.log('Статус ответа:', response.status);
+                showDebug(`📥 Статус ответа: ${response.status}`);
                 
                 const data = await response.json();
-                console.log('Данные ответа:', data);
+                showDebug(`📦 Данные ответа: ${JSON.stringify(data)}`);
 
-                if (data.success) {
-                    console.log('Успех! Перенаправление...');
+                if (response.ok && data.success) {
+                    showDebug('✅ Успех! Перенаправление на /dashboard');
                     window.location.href = '/dashboard';
                 } else {
                     errorEl.textContent = data.error || 'Ошибка регистрации';
+                    showDebug(`❌ Ошибка: ${data.error || 'Неизвестная ошибка'}`);
                 }
             } catch (error) {
-                console.error('Ошибка:', error);
-                errorEl.textContent = 'Ошибка соединения с сервером: ' + error.message;
+                console.error('❌ Ошибка:', error);
+                errorEl.textContent = 'Ошибка соединения с сервером';
+                showDebug(`❌ Исключение: ${error.message}`);
             }
         }
 
-        // Добавляем обработчики напрямую на кнопки (на случай если onsubmit не сработает)
+        // Добавляем дополнительные обработчики
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('DOM загружен, добавляем обработчики');
+            showDebug('🔵 DOM загружен');
             
+            // Проверяем, что элементы существуют
             const loginBtn = document.querySelector('#loginForm .auth-button');
             if (loginBtn) {
-                loginBtn.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    handleLogin(e);
-                });
-            }
-            
-            const registerBtn = document.querySelector('#registerForm .auth-button');
-            if (registerBtn) {
-                registerBtn.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    handleRegister(e);
-                });
+                showDebug('✅ Кнопка входа найдена');
+            } else {
+                showDebug('❌ Кнопка входа НЕ найдена');
             }
         });
     </script>
