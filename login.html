@@ -96,7 +96,7 @@
         }
     </style>
 
-    <script>
+   <script>
         let tg = window.Telegram.WebApp;
         tg.expand();
         tg.ready();
@@ -115,7 +115,6 @@
             }
             
             document.getElementById('errorMessage').textContent = '';
-            document.getElementById('successMessage').textContent = '';
         }
 
         // Проверка URL параметра
@@ -124,109 +123,81 @@
             showTab('register');
         }
 
-        // Обработка входа
+        // Обработка входа - ИСПРАВЛЕНО
         async function handleLogin(event) {
-            event.preventDefault();
+            event.preventDefault(); // ОСТАНОВИТЬ отправку формы
             
-            const username = document.getElementById('loginUsername').value.trim();
-            const password = document.getElementById('loginPassword').value.trim();
+            console.log('🟢 handleLogin вызван');
+            
+            const username = document.getElementById('loginUsername').value;
+            const password = document.getElementById('loginPassword').value;
             const errorEl = document.getElementById('errorMessage');
-            const successEl = document.getElementById('successMessage');
-
-            // Очищаем сообщения
-            errorEl.textContent = '';
-            successEl.textContent = '';
 
             if (!username || !password) {
                 errorEl.textContent = 'Введите логин и пароль';
                 return;
             }
 
-            console.log('Попытка входа:', username);
+            console.log('Отправка запроса:', { username, password });
 
             try {
                 const response = await fetch('/api/login', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json'
+                        'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ username, password }),
-                    credentials: 'include' // Важно для сессий!
+                    body: JSON.stringify({ username, password })
                 });
-                
+
                 console.log('Статус ответа:', response.status);
                 
                 const data = await response.json();
                 console.log('Данные ответа:', data);
 
-                if (response.ok && data.success) {
-                    successEl.textContent = '✅ Вход выполнен! Перенаправление...';
-                    setTimeout(() => {
-                        window.location.href = '/dashboard';
-                    }, 1000);
+                if (data.success) {
+                    console.log('Успех! Перенаправление...');
+                    window.location.href = '/dashboard';
                 } else {
                     errorEl.textContent = data.error || 'Ошибка входа';
                 }
             } catch (error) {
                 console.error('Ошибка:', error);
-                errorEl.textContent = 'Ошибка соединения с сервером';
+                errorEl.textContent = 'Ошибка соединения с сервером: ' + error.message;
             }
         }
 
-        // Обработка регистрации
+        // Обработка регистрации - ИСПРАВЛЕНО
         async function handleRegister(event) {
-            event.preventDefault();
+            event.preventDefault(); // ОСТАНОВИТЬ отправку формы
             
-            const username = document.getElementById('regUsername').value.trim();
-            const password = document.getElementById('regPassword').value.trim();
-            const confirm = document.getElementById('regConfirmPassword').value.trim();
-            const full_name = document.getElementById('regFullName').value.trim();
-            const email = document.getElementById('regEmail').value.trim();
-            const phone = document.getElementById('regPhone').value.trim();
+            console.log('🟢 handleRegister вызван');
             
+            const password = document.getElementById('regPassword').value;
+            const confirm = document.getElementById('regConfirmPassword').value;
             const errorEl = document.getElementById('errorMessage');
-            const successEl = document.getElementById('successMessage');
-
-            // Очищаем сообщения
-            errorEl.textContent = '';
-            successEl.textContent = '';
-
-            // Валидация
-            if (!username || !password || !full_name || !email) {
-                errorEl.textContent = 'Заполните все обязательные поля';
-                return;
-            }
 
             if (password !== confirm) {
                 errorEl.textContent = 'Пароли не совпадают';
                 return;
             }
 
-            if (password.length < 6) {
-                errorEl.textContent = 'Пароль должен быть не менее 6 символов';
-                return;
-            }
-
             const userData = {
-                username: username,
+                username: document.getElementById('regUsername').value,
                 password: password,
-                full_name: full_name,
-                email: email,
-                phone: phone || ''
+                full_name: document.getElementById('regFullName').value,
+                email: document.getElementById('regEmail').value,
+                phone: document.getElementById('regPhone').value
             };
 
-            console.log('Попытка регистрации:', username);
+            console.log('Отправка данных:', userData);
 
             try {
                 const response = await fetch('/api/register', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json'
+                        'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify(userData),
-                    credentials: 'include'
+                    body: JSON.stringify(userData)
                 });
 
                 console.log('Статус ответа:', response.status);
@@ -234,19 +205,38 @@
                 const data = await response.json();
                 console.log('Данные ответа:', data);
 
-                if (response.ok && data.success) {
-                    successEl.textContent = '✅ Регистрация успешна! Перенаправление...';
-                    setTimeout(() => {
-                        window.location.href = '/dashboard';
-                    }, 1000);
+                if (data.success) {
+                    console.log('Успех! Перенаправление...');
+                    window.location.href = '/dashboard';
                 } else {
                     errorEl.textContent = data.error || 'Ошибка регистрации';
                 }
             } catch (error) {
                 console.error('Ошибка:', error);
-                errorEl.textContent = 'Ошибка соединения с сервером';
+                errorEl.textContent = 'Ошибка соединения с сервером: ' + error.message;
             }
         }
+
+        // Добавляем обработчики напрямую на кнопки (на случай если onsubmit не сработает)
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM загружен, добавляем обработчики');
+            
+            const loginBtn = document.querySelector('#loginForm .auth-button');
+            if (loginBtn) {
+                loginBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    handleLogin(e);
+                });
+            }
+            
+            const registerBtn = document.querySelector('#registerForm .auth-button');
+            if (registerBtn) {
+                registerBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    handleRegister(e);
+                });
+            }
+        });
     </script>
 </body>
 </html>
