@@ -3,32 +3,67 @@ let currentSchedule = [];
 let loanParams = {
     amount: 100000,
     termMonths: 12,
-    annualRate: 15
+    annualRate: 12.5 // Исправлено: теперь 12.5% как в сервере
 };
 let nextPaymentDate = new Date();
 let remainingDebt = 0;
 
 // Инициализация при запуске
 document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('apply-params').click(); // авто-расчёт при загрузке
+    console.log('🚀 Script.js инициализирован');
     setupEventListeners();
-    applyOverduePenalties(); // проверка пеней каждый день (имитация)
-    setInterval(applyOverduePenalties, 1000 * 60 * 60); // для демо - каждый час
+    // Устанавливаем начальные значения для калькулятора
+    document.getElementById('amount').value = 500000;
+    document.getElementById('term').value = 24;
+    calculateAndRenderSchedule();
+    
+    // Запускаем проверку пеней каждый час
+    setInterval(applyOverduePenalties, 1000 * 60 * 60);
 });
 
 function setupEventListeners() {
-    document.getElementById('apply-params').addEventListener('click', calculateAndRenderSchedule);
-    document.getElementById('make-payment').addEventListener('click', handlePayment);
+    const applyBtn = document.getElementById('apply-params');
+    if (applyBtn) {
+        applyBtn.addEventListener('click', calculateAndRenderSchedule);
+    }
+    
+    const paymentBtn = document.getElementById('make-payment');
+    if (paymentBtn) {
+        paymentBtn.addEventListener('click', handlePayment);
+    }
+    
+    // Валидация ввода
+    const amountInput = document.getElementById('amount');
+    const termInput = document.getElementById('term');
+    
+    if (amountInput) {
+        amountInput.addEventListener('input', function() {
+            let val = parseInt(this.value);
+            if (val < 10000) this.value = 10000;
+            if (val > 5000000) this.value = 5000000;
+        });
+    }
+    
+    if (termInput) {
+        termInput.addEventListener('input', function() {
+            let val = parseInt(this.value);
+            if (val < 6) this.value = 6;
+            if (val > 60) this.value = 60;
+        });
+    }
 }
 
-// --- Аннуитетный расчёт ---
+// Расчет аннуитетного платежа
 function calculateAnnuity(amount, months, ratePerYear) {
     const monthlyRate = ratePerYear / 100 / 12;
     if (monthlyRate === 0) return amount / months;
+    
+    // Правильная формула аннуитета
     const annuityFactor = (monthlyRate * Math.pow(1 + monthlyRate, months)) / (Math.pow(1 + monthlyRate, months) - 1);
     return amount * annuityFactor;
 }
 
+// Генерация графика платежей
 function generateSchedule(amount, months, annualRate, startDate = new Date()) {
     const monthlyPayment = calculateAnnuity(amount, months, annualRate);
     let balance = amount;
@@ -40,13 +75,17 @@ function generateSchedule(amount, months, annualRate, startDate = new Date()) {
     for (let i = 1; i <= months; i++) {
         const interest = balance * monthlyRate;
         let principal = monthlyPayment - interest;
-        if (principal > balance) principal = balance; // последний платёж
+        
+        // Корректировка для последнего платежа
+        if (principal > balance) {
+            principal = balance;
+        }
         
         balance -= principal;
         if (balance < 0.01) balance = 0; // защита от копеек
         
         const paymentDate = new Date(currentDate);
-        paymentDate.setMonth(currentDate.getMonth() + i - 1);
+        paymentDate.setMonth(currentDate.getMonth() + i);
         
         schedule.push({
             number: i,
@@ -54,26 +93,30 @@ function generateSchedule(amount, months, annualRate, startDate = new Date()) {
             payment: monthlyPayment,
             principal: principal,
             interest: interest,
-            remaining: balance,
-            status: 'pending', // pending, paid, overdue
+            remaining: Math.max(0, balance),
+            status: 'pending',
             paidAmount: 0,
-            paidDate: null
+            paidDate: null,
+            penalty: 0,
+            penaltyDays: 0
         });
     }
     return schedule;
 }
 
-// --- Рендер графика ---
+// Рендер графика
 function renderSchedule() {
     const tbody = document.getElementById('schedule-body');
+    if (!tbody) return;
+    
     if (!currentSchedule.length) {
-        tbody.innerHTML = '<tr><td colspan="7" class="empty-table">График не рассчитан</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="empty-table">График не рассчитан</td></tr>';
         return;
     }
     
     let html = '';
     const today = new Date();
-    today.setHours(0,0,0,0);
+    today.setHours(0, 0, 0, 0);
     
     currentSchedule.forEach(row => {
         const dueDate = new Date(row.dueDate + 'T12:00:00');
@@ -82,20 +125,22 @@ function renderSchedule() {
         
         let statusBadge = '';
         if (row.status === 'paid') {
-            statusBadge = '<span class="status-badge status-paid">Оплачено</span>';
+            statusBadge = '<span class="status-badge status-paid">✅ Оплачено</span>';
         } else if (isOverdue) {
-            statusBadge = '<span class="status-badge status-overdue">Просрочка</span>';
+            statusBadge = '<span class="status-badge status-overdue">⚠️ Просрочка</span>';
         } else {
-            statusBadge = '<span class="status-badge status-pending">Ожидается</span>';
+            statusBadge = '<span class="status-badge status-pending">⏳ Ожидается</span>';
         }
         
-        // Если была частичная оплата, показываем
-        const paymentDisplay = row.paidAmount > 0 ? `${row.paidAmount.toFixed(2)} / ${row.payment.toFixed(2)}` : row.payment.toFixed(2);
+        // Отображение суммы с учетом пеней
+        const displayAmount = row.penalty > 0 
+            ? `${(row.payment + row.penalty).toFixed(2)} ₽ (пеня ${row.penalty.toFixed(2)} ₽)`
+            : `${row.payment.toFixed(2)} ₽`;
         
         html += `<tr class="${rowClass}">
             <td>${row.number}</td>
             <td>${row.dueDate}</td>
-            <td>${paymentDisplay} ₽</td>
+            <td>${displayAmount}</td>
             <td>${row.principal.toFixed(2)} ₽</td>
             <td>${row.interest.toFixed(2)} ₽</td>
             <td>${row.remaining.toFixed(2)} ₽</td>
@@ -104,37 +149,44 @@ function renderSchedule() {
     });
     
     tbody.innerHTML = html;
-    
-    // Обновить сводку
     updateSummary();
 }
 
-// --- Обновление сводки и остатка ---
+// Обновление сводки
 function updateSummary() {
+    const summaryDiv = document.getElementById('loanSummary');
+    if (!summaryDiv) return;
+    
     if (!currentSchedule.length) {
-        document.getElementById('loanSummary').style.display = 'none';
+        summaryDiv.style.display = 'none';
         return;
     }
-    document.getElementById('loanSummary').style.display = 'flex';
     
-    // Находим остаток долга (последний remaining)
+    summaryDiv.style.display = 'block';
+    
+    // Остаток долга
     const lastRow = currentSchedule[currentSchedule.length - 1];
     remainingDebt = lastRow.remaining;
     
-    // Просрочка
+    // Расчет просрочки и пеней
     let overdueTotal = 0;
+    let totalPenalty = 0;
     const today = new Date();
-    today.setHours(0,0,0,0);
+    today.setHours(0, 0, 0, 0);
+    
     currentSchedule.forEach(row => {
         if (row.status !== 'paid') {
             const dueDate = new Date(row.dueDate + 'T12:00:00');
             if (dueDate < today) {
+                const daysOverdue = Math.floor((today - dueDate) / (1000 * 60 * 60 * 24));
+                const penalty = row.payment * 0.001 * daysOverdue;
                 overdueTotal += row.payment - (row.paidAmount || 0);
+                totalPenalty += penalty;
             }
         }
     });
     
-    // След. платёж
+    // Следующий платеж
     let nextPayment = null;
     for (let row of currentSchedule) {
         if (row.status !== 'paid') {
@@ -143,70 +195,73 @@ function updateSummary() {
         }
     }
     
-    document.getElementById('remainingDebt').innerText = remainingDebt.toFixed(2) + ' ₽';
-    document.getElementById('overdueInfo').innerHTML = overdueTotal.toFixed(2) + ' ₽' + (overdueTotal > 0 ? ' (включая пени)' : '');
+    // Обновляем DOM
+    const remainingEl = document.getElementById('remainingDebt');
+    const overdueEl = document.getElementById('overdueInfo');
+    const nextPaymentEl = document.getElementById('nextPaymentInfo');
     
-    if (nextPayment) {
-        document.getElementById('nextPaymentInfo').innerHTML = `${nextPayment.payment.toFixed(2)} ₽ (до ${nextPayment.dueDate})`;
-    } else {
-        document.getElementById('nextPaymentInfo').innerText = 'Кредит погашен';
+    if (remainingEl) remainingEl.innerText = remainingDebt.toFixed(2) + ' ₽';
+    if (overdueEl) {
+        overdueEl.innerHTML = totalPenalty > 0 
+            ? `${totalPenalty.toFixed(2)} ₽ (${overdueTotal.toFixed(2)} ₽ просрочка)`
+            : '0 ₽';
+    }
+    
+    if (nextPaymentEl && nextPayment) {
+        const totalDue = nextPayment.payment + (nextPayment.penalty || 0);
+        nextPaymentEl.innerHTML = `${totalDue.toFixed(2)} ₽ (до ${nextPayment.dueDate})`;
+    } else if (nextPaymentEl) {
+        nextPaymentEl.innerText = 'Кредит погашен';
     }
 }
 
-// --- Начисление пеней (0.1% от просрочки в день) ---
+// Начисление пеней
 function applyOverduePenalties() {
     if (!currentSchedule.length) return;
     
     const today = new Date();
-    today.setHours(0,0,0,0);
+    today.setHours(0, 0, 0, 0);
     let changes = false;
     
     currentSchedule.forEach(row => {
         if (row.status === 'paid') return;
         
         const dueDate = new Date(row.dueDate + 'T12:00:00');
-        if (dueDate >= today) return; // не просрочено
+        if (dueDate >= today) return;
         
         const daysOverdue = Math.floor((today - dueDate) / (1000 * 60 * 60 * 24));
         if (daysOverdue <= 0) return;
         
-        const overdueAmount = row.payment - (row.paidAmount || 0);
-        if (overdueAmount <= 0) return;
+        const penalty = row.payment * 0.001 * daysOverdue;
         
-        // Пеня 0.1% в день от просроченной суммы (но не больше самой суммы для адекватности)
-        const penalty = overdueAmount * 0.001 * daysOverdue;
-        if (penalty > 0.01) {
-            // Добавляем пеню как отдельную запись? Мы её начисляем к сумме долга.
-            // В реальном банке пеня капитализируется. Увеличим остаток по этому платежу?
-            // Упростим: добавим пеню к сумме платежа, но для наглядности увеличим поле payment?
-            // Сделаем так: добавим запись о пене в следующий платёж? Но проще накапливать тут.
-            // Мы будем увеличивать сумму к оплате (payment) для этого периода, но сохраним метку.
-            // Но это сломает аннуитет. Лучше создадим отдельное поле penalty.
-            if (!row.penalty) row.penalty = 0;
-            row.penalty += penalty; // накапливаем
-            row.payment += penalty; // увеличиваем сумму к оплате (так проще для логики платежа)
+        // Обновляем только если пеня изменилась
+        if (Math.abs(penalty - (row.penalty || 0)) > 0.01) {
+            row.penalty = penalty;
+            row.penaltyDays = daysOverdue;
             changes = true;
         }
     });
     
     if (changes) {
         renderSchedule();
-        showFeedback('Начислены пени за просрочку', 'warning');
+        showFeedback('⚠️ Начислены пени за просрочку', 'warning');
     }
 }
 
-// --- Обработка внесения платежа ---
+// Обработка платежа
 function handlePayment() {
     const paymentInput = document.getElementById('payment-amount');
+    if (!paymentInput) return;
+    
     let paymentAmount = parseFloat(paymentInput.value);
     
     if (isNaN(paymentAmount) || paymentAmount <= 0) {
-        showFeedback('Введите корректную сумму платежа', 'error');
+        showFeedback('❌ Введите корректную сумму платежа', 'error');
         return;
     }
     
     if (!currentSchedule.length) {
-        showFeedback('Сначала рассчитайте кредит', 'error');
+        showFeedback('❌ Сначала рассчитайте кредит', 'error');
         return;
     }
     
@@ -219,22 +274,24 @@ function handlePayment() {
         const row = currentSchedule[i];
         if (row.status === 'paid') continue;
         
-        const dueForThisPeriod = row.payment - (row.paidAmount || 0);
+        const totalDue = row.payment + (row.penalty || 0);
+        const paidSoFar = row.paidAmount || 0;
+        const dueForThisPeriod = totalDue - paidSoFar;
+        
         if (dueForThisPeriod <= 0) continue;
         
         if (remainingToPay >= dueForThisPeriod) {
-            // Полностью закрываем этот платёж
+            // Полностью закрываем этот платеж
             remainingToPay -= dueForThisPeriod;
             row.status = 'paid';
-            row.paidAmount = row.payment;
+            row.paidAmount = totalDue;
             row.paidDate = today;
-            feedback += `Платёж №${row.number} полностью погашен. `;
+            feedback += `✅ Платёж №${row.number} полностью погашен. `;
         } else {
             // Частичная оплата
             row.paidAmount = (row.paidAmount || 0) + remainingToPay;
-            row.status = 'pending'; // остаётся в ожидании
-            const newDue = row.payment - row.paidAmount;
-            feedback += `Внесено ${paymentAmount}₽. Осталось доплатить по платежу №${row.number}: ${newDue.toFixed(2)}₽. `;
+            const newDue = totalDue - row.paidAmount;
+            feedback += `💰 Внесено ${remainingToPay.toFixed(2)}₽. Осталось по платежу №${row.number}: ${newDue.toFixed(2)}₽. `;
             remainingToPay = 0;
             break;
         }
@@ -243,63 +300,81 @@ function handlePayment() {
     }
     
     if (remainingToPay > 0) {
-        // Если остались деньги после закрытия всех платежей — переносим на будущее
-        // (уменьшаем тело кредита, т.е. пересчитывать график сложно. Просто уменьшим остаток последнего)
-        const lastRow = currentSchedule[currentSchedule.length - 1];
-        if (lastRow.status === 'paid') {
-            feedback += ' Кредит полностью погашен. Переплата? Верните деньги другу.';
-        } else {
-            // Уменьшаем остаток в будущих периодах (упрощённо: уменьшаем payment последнего непогашенного)
-            for (let i = currentSchedule.length - 1; i >= 0; i--) {
-                if (currentSchedule[i].status !== 'paid') {
-                    currentSchedule[i].payment -= remainingToPay; // очень упрощённо, но для демо норм
-                    currentSchedule[i].principal -= remainingToPay;
-                    feedback += ` Переплата ${remainingToPay.toFixed(2)}₽ зачтена в будущий платёж №${currentSchedule[i].number}.`;
-                    break;
-                }
+        feedback += `💫 Переплата ${remainingToPay.toFixed(2)}₽ зачтена в будущие платежи.`;
+        
+        // Уменьшаем остаток в будущих периодах
+        for (let i = currentSchedule.length - 1; i >= 0; i--) {
+            if (currentSchedule[i].status !== 'paid') {
+                currentSchedule[i].payment -= remainingToPay;
+                currentSchedule[i].principal -= remainingToPay;
+                break;
             }
         }
     }
     
-    // Обновить отображение
+    // Обновляем отображение
     renderSchedule();
-    showFeedback(feedback || 'Платёж проведён', 'success');
+    showFeedback(feedback || '✅ Платёж проведён', 'success');
     paymentInput.value = '';
     
-    // Пересчитать пени после платежа
+    // Пересчитываем пени после платежа
     applyOverduePenalties();
 }
 
-// --- Пересчёт графика по новым параметрам ---
+// Пересчет графика
 function calculateAndRenderSchedule() {
-    const amount = parseFloat(document.getElementById('amount').value);
-    const term = parseInt(document.getElementById('term').value);
-    const rate = 15; // фиксированная ставка для простоты
+    const amountInput = document.getElementById('amount');
+    const termInput = document.getElementById('term');
     
-    if (amount < 10000 || term < 3) {
-        showFeedback('Минимальная сумма 10 000₽, срок от 3 мес', 'error');
+    if (!amountInput || !termInput) return;
+    
+    const amount = parseFloat(amountInput.value);
+    const term = parseInt(termInput.value);
+    const rate = 12.5; // Фиксированная ставка 12.5%
+    
+    if (amount < 10000 || term < 6) {
+        showFeedback('❌ Минимальная сумма 10 000₽, срок от 6 мес', 'error');
+        return;
+    }
+    
+    if (amount > 5000000 || term > 60) {
+        showFeedback('❌ Максимальная сумма 5 000 000₽, срок до 60 мес', 'error');
         return;
     }
     
     loanParams = { amount, termMonths: term, annualRate: rate };
     
-    // Сбрасываем и генерируем новый график
+    // Генерируем новый график
     currentSchedule = generateSchedule(amount, term, rate);
     renderSchedule();
-    showFeedback('Новый график платежей рассчитан', 'info');
+    showFeedback('✅ Новый график платежей рассчитан', 'success');
 }
 
-// --- Утилита для сообщений ---
+// Показать сообщение
 function showFeedback(message, type = 'info') {
     const feedbackDiv = document.getElementById('payment-feedback');
+    if (!feedbackDiv) return;
+    
     feedbackDiv.innerText = message;
-    feedbackDiv.style.color = type === 'error' ? 'var(--error)' : (type === 'success' ? 'var(--success)' : 'var(--text-secondary)');
+    feedbackDiv.className = `feedback-message ${type}`;
     
     // Автоочистка через 5 секунд
     setTimeout(() => {
         feedbackDiv.innerText = '';
+        feedbackDiv.className = '';
     }, 5000);
 }
 
+// Форматирование числа
+function formatNumber(num) {
+    return new Intl.NumberFormat('ru-RU', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0
+    }).format(num);
+}
+
 // Экспорт для отладки
-window.debug = { getSchedule: () => currentSchedule };
+window.debug = { 
+    getSchedule: () => currentSchedule,
+    calculateAnnuity: calculateAnnuity
+};

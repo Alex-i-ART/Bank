@@ -1,9 +1,20 @@
 services:
   - type: web
     name: tg-bank
-    env: node
+    runtime: node
+    repo: https://github.com/Alex-i-ART/Bank
+    plan: free
+    region: frankfurt
     buildCommand: npm install
     startCommand: npm start
     envVars:
       - key: NODE_VERSION
         value: 18.17.0
+      - key: NODE_ENV
+        value: production
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: PORT
+        value: 10000
+    healthCheckPath: /api/test
+    autoDeploy: true

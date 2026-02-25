@@ -12,26 +12,31 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
-app.use(cors());
+app.use(cors({
+    origin: true,
+    credentials: true
+}));
 app.use(express.static(path.join(__dirname)));
 
-// Сессии
+// Настройка сессий
 app.use(session({
-    secret: 'tg-bank-secret-key-2024',
+    secret: process.env.SESSION_SECRET || 'tg-bank-secret-key-2024',
     resave: false,
     saveUninitialized: false,
     cookie: { 
-        secure: false,
-        maxAge: 1000 * 60 * 60 * 24 // 24 часа
+        secure: process.env.NODE_ENV === 'production',
+        httpOnly: true,
+        maxAge: 1000 * 60 * 60 * 24, // 24 часа
+        sameSite: 'lax'
     }
 }));
 
 // Инициализация базы данных
 const db = new sqlite3.Database('./bank.db', (err) => {
     if (err) {
-        console.error('Ошибка подключения к БД:', err);
+        console.error('❌ Ошибка подключения к БД:', err);
     } else {
-        console.log('Подключено к SQLite базе данных');
+        console.log('✅ Подключено к SQLite базе данных');
         initDatabase();
     }
 });
@@ -75,7 +80,7 @@ function initDatabase() {
             payment_date DATETIME DEFAULT CURRENT_TIMESTAMP,
             due_date DATE NOT NULL,
             penalty REAL DEFAULT 0,
-            status TEXT DEFAULT 'pending',
+            status TEXT DEFAULT 'completed',
             FOREIGN KEY (loan_id) REFERENCES loans (id),
             FOREIGN KEY (user_id) REFERENCES users (id)
         )`);
@@ -91,10 +96,12 @@ function initDatabase() {
             interest REAL NOT NULL,
             remaining_balance REAL NOT NULL,
             status TEXT DEFAULT 'pending',
+            penalty REAL DEFAULT 0,
+            penalty_days INTEGER DEFAULT 0,
             FOREIGN KEY (loan_id) REFERENCES loans (id)
         )`);
 
-        console.log('Таблицы созданы или уже существуют');
+        console.log('✅ Таблицы созданы или уже существуют');
         
         // Создаем тестового пользователя
         createTestUser();
@@ -113,7 +120,7 @@ async function createTestUser() {
 
     db.get('SELECT id FROM users WHERE username = ?', [testUser.username], async (err, row) => {
         if (err) {
-            console.error('Ошибка проверки пользователя:', err);
+            console.error('❌ Ошибка проверки пользователя:', err);
             return;
         }
 
@@ -125,26 +132,31 @@ async function createTestUser() {
                     [testUser.username, hashedPassword, testUser.full_name, testUser.email, testUser.phone],
                     function(err) {
                         if (err) {
-                            console.error('Ошибка создания тестового пользователя:', err);
+                            console.error('❌ Ошибка создания тестового пользователя:', err);
                         } else {
-                            console.log('Тестовый пользователь создан: user/password');
+                            console.log('✅ Тестовый пользователь создан: user/password');
                         }
                     }
                 );
             } catch (error) {
-                console.error('Ошибка хеширования пароля:', error);
+                console.error('❌ Ошибка хеширования пароля:', error);
             }
         } else {
-            console.log('Тестовый пользователь уже существует');
+            console.log('✅ Тестовый пользователь уже существует');
         }
     });
 }
 
-// Маршруты API
+// ==================== API МАРШРУТЫ ====================
 
 // Регистрация
 app.post('/api/register', async (req, res) => {
     const { username, password, full_name, email, phone } = req.body;
+    
+    // Валидация
+    if (!username || !password || !full_name || !email) {
+        return res.status(400).json({ error: 'Все поля обязательны для заполнения' });
+    }
     
     try {
         const hashedPassword = await bcrypt.hash(password, 10);
@@ -154,7 +166,10 @@ app.post('/api/register', async (req, res) => {
             [username, hashedPassword, full_name, email, phone],
             function(err) {
                 if (err) {
-                    return res.status(400).json({ error: 'Пользователь уже существует' });
+                    if (err.message.includes('UNIQUE')) {
+                        return res.status(400).json({ error: 'Пользователь с таким логином или email уже существует' });
+                    }
+                    return res.status(500).json({ error: 'Ошибка базы данных' });
                 }
                 
                 req.session.userId = this.lastID;
@@ -168,6 +183,7 @@ app.post('/api/register', async (req, res) => {
             }
         );
     } catch (error) {
+        console.error('❌ Ошибка регистрации:', error);
         res.status(500).json({ error: 'Ошибка сервера' });
     }
 });
@@ -175,6 +191,10 @@ app.post('/api/register', async (req, res) => {
 // Вход
 app.post('/api/login', (req, res) => {
     const { username, password } = req.body;
+    
+    if (!username || !password) {
+        return res.status(400).json({ error: 'Введите логин и пароль' });
+    }
     
     db.get('SELECT * FROM users WHERE username = ?', [username], async (err, user) => {
         if (err) {
@@ -231,8 +251,12 @@ app.get('/api/check-auth', (req, res) => {
 
 // Выход
 app.post('/api/logout', (req, res) => {
-    req.session.destroy();
-    res.json({ success: true });
+    req.session.destroy((err) => {
+        if (err) {
+            return res.status(500).json({ error: 'Ошибка при выходе' });
+        }
+        res.json({ success: true });
+    });
 });
 
 // Создание кредита
@@ -244,14 +268,23 @@ app.post('/api/loans/create', (req, res) => {
     const { amount, term } = req.body;
     const userId = req.session.userId;
     
+    // Валидация
+    if (!amount || !term || amount < 10000 || amount > 5000000 || term < 6 || term > 60) {
+        return res.status(400).json({ error: 'Неверные параметры кредита' });
+    }
+    
     // Расчет аннуитетного платежа
     const interestRate = 12.5; // 12.5% годовых
     const monthlyRate = interestRate / 100 / 12;
-    const monthlyPayment = amount * monthlyRate * Math.pow(1 + monthlyRate, term) / (Math.pow(1 + monthlyRate, term) - 1);
+    
+    // Правильная формула аннуитета
+    const annuityFactor = (monthlyRate * Math.pow(1 + monthlyRate, term)) / (Math.pow(1 + monthlyRate, term) - 1);
+    const monthlyPayment = amount * annuityFactor;
     const totalAmount = monthlyPayment * term;
     
     const nextPaymentDate = new Date();
     nextPaymentDate.setMonth(nextPaymentDate.getMonth() + 1);
+    nextPaymentDate.setDate(28); // Фиксируем день платежа
     
     db.run(
         `INSERT INTO loans (user_id, amount, term_months, monthly_payment, total_amount, remaining_amount, next_payment_date) 
@@ -259,6 +292,7 @@ app.post('/api/loans/create', (req, res) => {
         [userId, amount, term, monthlyPayment, totalAmount, totalAmount, nextPaymentDate.toISOString().split('T')[0]],
         function(err) {
             if (err) {
+                console.error('❌ Ошибка создания кредита:', err);
                 return res.status(500).json({ error: 'Ошибка создания кредита' });
             }
             
@@ -266,6 +300,8 @@ app.post('/api/loans/create', (req, res) => {
             
             // Создание графика платежей
             let remainingBalance = totalAmount;
+            const queries = [];
+            
             for (let i = 1; i <= term; i++) {
                 const interestPayment = remainingBalance * monthlyRate;
                 const principalPayment = monthlyPayment - interestPayment;
@@ -273,19 +309,37 @@ app.post('/api/loans/create', (req, res) => {
                 
                 const dueDate = new Date();
                 dueDate.setMonth(dueDate.getMonth() + i);
+                dueDate.setDate(28); // Фиксируем день платежа
                 
-                db.run(
-                    `INSERT INTO payment_schedule (loan_id, payment_number, due_date, amount, principal, interest, remaining_balance)
-                     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-                    [loanId, i, dueDate.toISOString().split('T')[0], monthlyPayment, principalPayment, interestPayment, Math.max(0, remainingBalance)]
-                );
+                queries.push(new Promise((resolve, reject) => {
+                    db.run(
+                        `INSERT INTO payment_schedule 
+                         (loan_id, payment_number, due_date, amount, principal, interest, remaining_balance, status) 
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                        [loanId, i, dueDate.toISOString().split('T')[0], 
+                         monthlyPayment, principalPayment, interestPayment, 
+                         Math.max(0, remainingBalance), 'pending'],
+                        function(err) {
+                            if (err) reject(err);
+                            else resolve();
+                        }
+                    );
+                }));
             }
             
-            res.json({ 
-                success: true, 
-                message: 'Кредит успешно оформлен',
-                loanId
-            });
+            Promise.all(queries)
+                .then(() => {
+                    console.log(`✅ Кредит ${loanId} успешно создан для пользователя ${userId}`);
+                    res.json({ 
+                        success: true, 
+                        message: 'Кредит успешно оформлен',
+                        loanId
+                    });
+                })
+                .catch(err => {
+                    console.error('❌ Ошибка создания графика:', err);
+                    res.status(500).json({ error: 'Ошибка создания графика платежей' });
+                });
         }
     );
 });
@@ -303,19 +357,18 @@ app.get('/api/user-data', (req, res) => {
             return res.status(404).json({ error: 'Пользователь не найден' });
         }
         
-        // Получаем активные кредиты
-        db.all(`SELECT * FROM loans WHERE user_id = ? AND status = 'active'`, [userId], (err, loans) => {
+        // Получаем все кредиты пользователя
+        db.all(`SELECT * FROM loans WHERE user_id = ? ORDER BY created_at DESC`, [userId], (err, loans) => {
             if (err) {
                 return res.status(500).json({ error: 'Ошибка получения данных' });
             }
             
-            // Для каждого кредита получаем график платежей
-            const loansWithSchedule = [];
-            let completed = 0;
-            
             if (loans.length === 0) {
                 return res.json({ user, loans: [] });
             }
+            
+            const loansWithSchedule = [];
+            let completed = 0;
             
             loans.forEach((loan, index) => {
                 db.all(
@@ -323,20 +376,30 @@ app.get('/api/user-data', (req, res) => {
                     [loan.id],
                     (err, schedule) => {
                         if (err) {
-                            console.error('Ошибка получения графика:', err);
+                            console.error('❌ Ошибка получения графика:', err);
+                            schedule = [];
                         }
                         
-                        // Рассчитываем пени
+                        // Рассчитываем пени и обновляем статусы
                         const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        
                         schedule.forEach(payment => {
+                            const dueDate = new Date(payment.due_date);
+                            dueDate.setHours(0, 0, 0, 0);
+                            
                             if (payment.status === 'pending') {
-                                const dueDate = new Date(payment.due_date);
                                 if (today > dueDate) {
                                     const daysOverdue = Math.floor((today - dueDate) / (1000 * 60 * 60 * 24));
-                                    payment.penalty = payment.amount * 0.001 * daysOverdue; // 0.1% в день
+                                    payment.penalty = payment.amount * 0.001 * daysOverdue;
+                                    payment.penalty_days = daysOverdue;
                                 } else {
                                     payment.penalty = 0;
+                                    payment.penalty_days = 0;
                                 }
+                            } else {
+                                payment.penalty = 0;
+                                payment.penalty_days = 0;
                             }
                         });
                         
@@ -366,12 +429,16 @@ app.post('/api/payments/make', (req, res) => {
     const { loanId, amount } = req.body;
     const userId = req.session.userId;
     
+    if (!loanId || !amount || amount <= 0) {
+        return res.status(400).json({ error: 'Неверные параметры платежа' });
+    }
+    
     db.get('SELECT * FROM loans WHERE id = ? AND user_id = ?', [loanId, userId], (err, loan) => {
         if (err || !loan) {
             return res.status(404).json({ error: 'Кредит не найден' });
         }
         
-        // Получаем следующий платеж
+        // Получаем следующий непогашенный платеж
         db.get(
             `SELECT * FROM payment_schedule 
              WHERE loan_id = ? AND status = 'pending' 
@@ -386,6 +453,7 @@ app.post('/api/payments/make', (req, res) => {
                 const dueDate = new Date(nextPayment.due_date);
                 let penalty = 0;
                 
+                // Расчет пени за просрочку
                 if (today > dueDate) {
                     const daysOverdue = Math.floor((today - dueDate) / (1000 * 60 * 60 * 24));
                     penalty = nextPayment.amount * 0.001 * daysOverdue;
@@ -393,67 +461,153 @@ app.post('/api/payments/make', (req, res) => {
                 
                 const totalDue = nextPayment.amount + penalty;
                 let message = '';
+                let updateQuery = null;
                 
                 if (amount >= totalDue) {
-                    // Полная оплата
-                    const change = amount - totalDue;
-                    message = `Платеж принят. Сдача: ${change.toFixed(2)} ₽`;
+                    // Полная оплата с учетом пени
+                    const change = (amount - totalDue).toFixed(2);
+                    message = `✅ Платеж принят. Сдача: ${change} ₽`;
                     
-                    db.run(
-                        `UPDATE payment_schedule SET status = 'paid' WHERE id = ?`,
-                        [nextPayment.id]
-                    );
+                    // Обновляем статус платежа
+                    updateQuery = new Promise((resolve, reject) => {
+                        db.run(
+                            `UPDATE payment_schedule SET status = 'paid' WHERE id = ?`,
+                            [nextPayment.id],
+                            function(err) {
+                                if (err) reject(err);
+                                else resolve();
+                            }
+                        );
+                    });
                     
-                    db.run(
-                        `UPDATE loans SET remaining_amount = remaining_amount - ? WHERE id = ?`,
-                        [nextPayment.amount, loanId]
-                    );
+                    // Обновляем остаток по кредиту
+                    updateQuery = Promise.all([
+                        updateQuery,
+                        new Promise((resolve, reject) => {
+                            db.run(
+                                `UPDATE loans SET remaining_amount = remaining_amount - ? WHERE id = ?`,
+                                [nextPayment.amount, loanId],
+                                function(err) {
+                                    if (err) reject(err);
+                                    else resolve();
+                                }
+                            );
+                        })
+                    ]);
                     
                 } else if (amount >= nextPayment.amount) {
                     // Оплачена основная сумма, но не пеня
-                    message = `Внесено ${amount} ₽. Требуется доплатить пени: ${(totalDue - amount).toFixed(2)} ₽`;
+                    const remainingPenalty = (totalDue - amount).toFixed(2);
+                    message = `⚠️ Внесено ${amount} ₽. Требуется доплатить пени: ${remainingPenalty} ₽`;
+                    
+                    // Частично оплачиваем платеж
+                    updateQuery = new Promise((resolve, reject) => {
+                        db.run(
+                            `UPDATE payment_schedule SET amount = amount - ? WHERE id = ?`,
+                            [amount, nextPayment.id],
+                            function(err) {
+                                if (err) reject(err);
+                                else resolve();
+                            }
+                        );
+                    });
                     
                 } else {
-                    // Частичная оплата
-                    const remaining = nextPayment.amount - amount;
-                    message = `Внесено ${amount} ₽. Осталось оплатить: ${(remaining + penalty).toFixed(2)} ₽ (включая пени)`;
+                    // Частичная оплата основной суммы
+                    const remaining = (nextPayment.amount - amount).toFixed(2);
+                    message = `⚠️ Внесено ${amount} ₽. Осталось оплатить: ${(remaining + penalty).toFixed(2)} ₽ (включая пени)`;
+                    
+                    // Уменьшаем сумму платежа
+                    updateQuery = new Promise((resolve, reject) => {
+                        db.run(
+                            `UPDATE payment_schedule SET amount = amount - ? WHERE id = ?`,
+                            [amount, nextPayment.id],
+                            function(err) {
+                                if (err) reject(err);
+                                else resolve();
+                            }
+                        );
+                    });
                 }
                 
-                // Записываем платеж
-                db.run(
-                    `INSERT INTO payments (loan_id, user_id, amount, due_date, penalty, status)
-                     VALUES (?, ?, ?, ?, ?, ?)`,
-                    [loanId, userId, amount, nextPayment.due_date, penalty, 'completed'],
-                    (err) => {
-                        if (err) {
-                            return res.status(500).json({ error: 'Ошибка записи платежа' });
+                // Записываем платеж в историю
+                const paymentPromise = new Promise((resolve, reject) => {
+                    db.run(
+                        `INSERT INTO payments (loan_id, user_id, amount, due_date, penalty, status)
+                         VALUES (?, ?, ?, ?, ?, ?)`,
+                        [loanId, userId, amount, nextPayment.due_date, penalty, 'completed'],
+                        function(err) {
+                            if (err) reject(err);
+                            else resolve();
                         }
-                        
-                        res.json({
-                            success: true,
-                            message,
-                            payment: {
-                                amount,
-                                penalty,
-                                nextPaymentDue: totalDue - amount
-                            }
+                    );
+                });
+                
+                if (updateQuery) {
+                    Promise.all([paymentPromise, updateQuery])
+                        .then(() => {
+                            res.json({
+                                success: true,
+                                message,
+                                payment: {
+                                    amount,
+                                    penalty,
+                                    nextPaymentDue: (totalDue - amount).toFixed(2)
+                                }
+                            });
+                        })
+                        .catch(err => {
+                            console.error('❌ Ошибка записи платежа:', err);
+                            res.status(500).json({ error: 'Ошибка записи платежа' });
                         });
-                    }
-                );
+                } else {
+                    paymentPromise
+                        .then(() => {
+                            res.json({
+                                success: true,
+                                message,
+                                payment: {
+                                    amount,
+                                    penalty,
+                                    nextPaymentDue: (totalDue - amount).toFixed(2)
+                                }
+                            });
+                        })
+                        .catch(err => {
+                            console.error('❌ Ошибка записи платежа:', err);
+                            res.status(500).json({ error: 'Ошибка записи платежа' });
+                        });
+                }
             }
         );
     });
 });
 
-// Обслуживание HTML страниц
+// Тестовый маршрут API
+app.get('/api/test', (req, res) => {
+    res.json({ 
+        status: 'ok', 
+        message: 'API работает',
+        time: new Date().toISOString(),
+        session: req.session.userId ? 'active' : 'none'
+    });
+});
+
+// ==================== СТАТИЧЕСКИЕ ФАЙЛЫ И МАРШРУТЫ ====================
+
+// Обслуживание статических файлов (уже есть app.use выше)
+
+// Главная страница
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
+// Страница входа
 app.get('/login', (req, res) => {
     res.sendFile(path.join(__dirname, 'login.html'));
 });
 
+// Личный кабинет (с проверкой авторизации)
 app.get('/dashboard', (req, res) => {
     if (!req.session.userId) {
         return res.redirect('/login');
@@ -461,20 +615,7 @@ app.get('/dashboard', (req, res) => {
     res.sendFile(path.join(__dirname, 'dashboard.html'));
 });
 
-app.listen(PORT, () => {
-    console.log(`Сервер запущен на порту ${PORT}`);
-});
-
-// Корневой маршрут для проверки API
-app.get('/api/test', (req, res) => {
-    res.json({ 
-        status: 'ok', 
-        message: 'API работает',
-        time: new Date().toISOString()
-    });
-});
-
-// Обработка всех несуществующих маршрутов API
+// Обработка всех несуществующих API маршрутов
 app.use('/api/*', (req, res) => {
     console.log('❌ Не найден API маршрут:', req.originalUrl);
     res.status(404).json({ 
@@ -484,10 +625,14 @@ app.use('/api/*', (req, res) => {
     });
 });
 
-// Обслуживание статических файлов
-app.use(express.static(path.join(__dirname)));
-
-// Все остальные маршруты должны вести на index.html (для SPA)
+// Все остальные маршруты перенаправляем на главную
 app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+    res.redirect('/');
+});
+
+// ==================== ЗАПУСК СЕРВЕРА ====================
+app.listen(PORT, () => {
+    console.log(`🚀 Сервер запущен на порту ${PORT}`);
+    console.log(`🌐 Локальный доступ: http://localhost:${PORT}`);
+    console.log(`📊 Режим: ${process.env.NODE_ENV || 'development'}`);
 });
