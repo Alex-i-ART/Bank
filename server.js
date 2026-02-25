@@ -464,3 +464,30 @@ app.get('/dashboard', (req, res) => {
 app.listen(PORT, () => {
     console.log(`Сервер запущен на порту ${PORT}`);
 });
+
+// Корневой маршрут для проверки API
+app.get('/api/test', (req, res) => {
+    res.json({ 
+        status: 'ok', 
+        message: 'API работает',
+        time: new Date().toISOString()
+    });
+});
+
+// Обработка всех несуществующих маршрутов API
+app.use('/api/*', (req, res) => {
+    console.log('❌ Не найден API маршрут:', req.originalUrl);
+    res.status(404).json({ 
+        error: 'API маршрут не найден',
+        path: req.originalUrl,
+        method: req.method
+    });
+});
+
+// Обслуживание статических файлов
+app.use(express.static(path.join(__dirname)));
+
+// Все остальные маршруты должны вести на index.html (для SPA)
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
